@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>스마트공장 타이쿤: 돌발 사고·지연 & Fool Proof 자동 후속 조치 비교 시뮬레이터</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #1E293B;
+    --bar: #0F172A;
+    --panel: #1E293B;
+    --ctrl: #334155;
+    --line: #475569;
+    --text: #F8FAFC;
+    --muted: #94A3B8;
+    --amber: #FDE047;
+    --focus: #38BDF8;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --page: #172033; --bar: #0B1222; }
+  }
+  :root[data-theme="dark"] { --page: #172033; --bar: #0B1222; }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text);
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Nanum Gothic", system-ui, sans-serif;
+    font-size: 13px;
+    min-height: 100%;
+  }
+  button { font: inherit; }
+  button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  /* 상단 4대 비교 전광판 */
+  .scoreboard {
+    background: var(--bar);
+    padding: 8px 10px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 7px 11px 8px;
+  }
+  .card h2 { margin: 0 0 4px; font-size: 12.5px; font-weight: 700; }
+  .card p { margin: 0; font-size: 11.5px; font-weight: 700; white-space: pre-line; line-height: 1.45; }
+
+  /* 컨트롤 바 */
+  .ctrl {
+    background: var(--ctrl);
+    margin: 4px 10px;
+    padding: 6px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .ctrl .spacer { flex: 1 1 auto; }
+  .btn {
+    border: 0;
+    color: #fff;
+    font-weight: 700;
+    font-size: 12px;
+    padding: 6px 11px;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  .btn:hover { filter: brightness(1.1); }
+  .lbl { font-size: 11.5px; font-weight: 700; margin-left: 8px; }
+  .chip {
+    border: 1px solid #1E293B;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 3px 8px;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  .chip.speed { background: #0F172A; color: #38BDF8; }
+  .chip.prob { background: #7C2D12; color: #FFEDD5; }
+  .chip[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: -2px; }
+
+  /* 메인 영역 */
+  .main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 440px;
+    gap: 12px;
+    margin: 2px 10px;
+  }
+  .floor {
+    background: #F1F5F9;
+    border: 2px solid #94A3B8;
+    overflow-x: auto;
+  }
+  #floor { display: block; width: 100%; min-width: 640px; height: auto; aspect-ratio: 1000 / 535; }
+  .charts {
+    background: var(--bar);
+    border: 1px solid var(--line);
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .charts canvas { display: block; width: 100%; height: 178px; }
+
+  /* 하단 로그 테이블 */
+  .log {
+    margin: 8px 10px 10px;
+    background: var(--bar);
+    border: 1px solid var(--line);
+    max-height: 190px;
+    overflow: auto;
+  }
+  table { border-collapse: collapse; width: 100%; min-width: 1350px; font-size: 11.5px; }
+  thead th {
+    position: sticky; top: 0;
+    background: #E2E8F0; color: #0F172A;
+    font-weight: 700; padding: 5px 6px;
+    border-right: 1px solid #CBD5E1;
+    white-space: nowrap;
+  }
+  tbody td {
+    text-align: center; padding: 3px 6px;
+    background: #FFFFFF; color: #0F172A;
+    border-bottom: 1px solid #E2E8F0;
+    white-space: nowrap;
+  }
+  tbody tr:nth-child(even) td { background: #F8FAFC; }
+  td.ev-auto { color: #B45309; font-weight: 700; }
+  td.ev-man { color: #DC2626; font-weight: 700; }
+  .empty-row td { color: #64748B; padding: 14px; }
+
+  /* 결과 모달 */
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(2, 6, 23, 0.6);
+    display: none; align-items: center; justify-content: center;
+    padding: 16px; z-index: 20;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: #FFFFFF; color: #0F172A;
+    max-width: 560px; width: 100%;
+    border-top: 6px solid #6366F1;
+    padding: 20px 22px 18px;
+    border-radius: 4px;
+  }
+  .modal h3 { margin: 0 0 12px; font-size: 17px; }
+  .modal ol { margin: 0 0 16px; padding-left: 20px; line-height: 1.7; font-size: 13.5px; }
+  .modal .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+
+  @media (max-width: 1180px) {
+    .scoreboard { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .main { grid-template-columns: minmax(0, 1fr); }
+    .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    .scoreboard { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<section class="scoreboard" aria-label="핵심 비교 지표">
+  <div class="card"><h2 style="color:#38BDF8">🏎️ ① 생산 속도 & 출하량 대결</h2><p id="card-speed"></p></div>
+  <div class="card"><h2 style="color:#FDE047">🚨 ② 돌발 이상·지연 발생 & 후속 조치 비교</h2><p id="card-event"></p></div>
+  <div class="card"><h2 style="color:#34D399">✨ ③ 후속 조치 후 최종 품질 (Fool Proof)</h2><p id="card-quality"></p></div>
+  <div class="card"><h2 style="color:#C4B5FD">📈 ④ Edge Hub 데이터 축적 & 예지보전 효과</h2><p id="card-data"></p></div>
+</section>
+
+<nav class="ctrl" aria-label="시뮬레이션 제어">
+  <button class="btn" id="btn-play" style="background:#10B981">▶ 공장 가동 시작</button>
+  <button class="btn" id="btn-spawn" style="background:#3B82F6">🚗 부품 1개 투입</button>
+  <button class="btn" id="btn-instant" style="background:#6366F1">⚡ 200개 즉시 완주 (차트·CSV 뽑기)</button>
+  <button class="btn" id="btn-reset" style="background:#64748B">↺ 리셋</button>
+
+  <span class="lbl">배속:</span>
+  <button class="chip speed" data-speed="1" aria-pressed="false">1x</button>
+  <button class="chip speed" data-speed="2" aria-pressed="true">2x</button>
+  <button class="chip speed" data-speed="4" aria-pressed="false">4x</button>
+  <button class="chip speed" data-speed="8" aria-pressed="false">8x</button>
+
+  <span class="lbl" style="color:var(--amber)">🎲 돌발사고 확률:</span>
+  <button class="chip prob" data-prob="0.5" data-label="낮음(0.5x)" aria-pressed="false">낮음(0.5x)</button>
+  <button class="chip prob" data-prob="1" data-label="표준(1x)" aria-pressed="true">표준(1x)</button>
+  <button class="chip prob" data-prob="2.2" data-label="자주발생(2.2x)" aria-pressed="false">자주발생(2.2x)</button>
+  <span class="lbl" id="lbl-prob" style="color:var(--amber); margin-left:2px">[기본 1.0배]</span>
+
+  <span class="spacer"></span>
+  <button class="btn" id="btn-csv" style="background:#D97706">💾 데이터(CSV) 저장</button>
+  <button class="btn" id="btn-png" style="background:#0D9488">📊 6분할 차트(PNG) 저장</button>
+</nav>
+
+<main class="main">
+  <div class="floor"><canvas id="floor" width="1000" height="535" aria-label="수작업 공방과 스마트 로봇 공장 애니메이션"></canvas></div>
+  <aside class="charts" aria-label="실시간 비교 차트">
+    <canvas id="mini-torque"></canvas>
+    <canvas id="mini-delay"></canvas>
+    <canvas id="mini-ct"></canvas>
+  </aside>
+</main>
+
+<div class="log" id="log-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>순번</th><th>작업지시(WO)</th><th>[스마트공장] 감지 이벤트</th>
+        <th>[스마트공장] 자동 후속 조치 (Fool Proof)</th><th>자동복구지연(s)</th>
+        <th>[수작업] 발생 사고</th><th>수동수리지연(s)</th><th>체결토크(N·m)</th>
+        <th>용접품질(%)</th><th>비전검사(%)</th><th>[자동]총소요(s)</th><th>[수동]총소요(s)</th>
+      </tr>
+    </thead>
+    <tbody id="log-body"></tbody>
+  </table>
+</div>
+
+<div class="modal-bg" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal">
+    <h3 id="modal-title"></h3>
+    <ol id="modal-list"></ol>
+    <div class="actions">
+      <button class="btn" id="m-csv" style="background:#D97706">💾 CSV 저장</button>
+      <button class="btn" id="m-png" style="background:#0D9488">📊 6분할 차트(PNG) 저장</button>
+      <button class="btn" id="m-close" style="background:#64748B">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const FONT = '"Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Nanum Gothic", system-ui, sans-serif';
+
+/* ===================== 난수 (시드 고정) ===================== */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+class Rng {
+  constructor(seed) { this.r = mulberry32(seed); this.spare = null; }
+  random() { return this.r(); }
+  uniform(a, b) { return a + (b - a) * this.r(); }
+  normal(mu, sd) {
+    if (this.spare !== null) { const v = this.spare; this.spare = null; return mu + sd * v; }
+    let u, v, s;
+    do { u = this.r() * 2 - 1; v = this.r() * 2 - 1; s = u * u + v * v; } while (s >= 1 || s === 0);
+    const m = Math.sqrt(-2 * Math.log(s) / s);
+    this.spare = v * m;
+    return mu + sd * u * m;
+  }
+}
+const rnd = (v, d) => { const f = 10 ** d; return Math.round(v * f) / f; };
+const clip = (v, a, b) => Math.min(b, Math.max(a, v));
+const pad = n => String(n).padStart(2, "0");
+function fmtTime(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/* ===================== 시뮬레이션 엔진 ===================== */
+// (스테이션 번호, 기본 발생확률, 이벤트명, 스마트공장 자동 조치, 수작업 조치, 자동 복구 지연초, 수동 복구 지연초)
+const EVENT_CATALOG = [
+  { st: 1, p: 0.08, name: "안착 미세편차·공압저하", autoAct: "센서감지→솔밸브 예비채널 자동 재클램핑", manAct: "작업자 수동 바이스 해제 후 재고정", aDelay: 1.6, mDelay: 11.5 },
+  { st: 2, p: 0.10, name: "볼트 나사산 헛돌기 감지", autoAct: "Fool Proof 인터록→로봇 역회전 자동 재체결", manAct: "작업자 수공구 볼트 발취 및 수동 재작업", aDelay: 2.1, mDelay: 15.0 },
+  { st: 5, p: 0.07, name: "용접 스패터 팁 오염", autoAct: "스마트용접 전류보상 & 자동 팁 드레싱", manAct: "라인 정지 후 작업자 사포 수동 연마", aDelay: 1.5, mDelay: 14.0 },
+  { st: 6, p: 0.06, name: "표면 이물질·간섭 감지", autoAct: "에어블로워 자동분사 세척 후 비전 재스캔 PASS", manAct: "작업자 돋보기 재확인 및 수동 세척", aDelay: 1.3, mDelay: 9.5 },
+];
+const LOT_NAMES = {
+  1: "Lv.1 초기공급 (WO-01)",
+  2: "Lv.2 피드백반영 (WO-02)",
+  3: "Lv.3 속도최적화 (WO-03)",
+  4: "Lv.4 예지보전·안정화 (WO-04)",
+};
+const DROP_COLS = ["lot_level", "lot_stage_label", "auto_event_station", "manual_event_stage"];
+
+class Engine {
+  constructor(seed = 42, probScale = 1.0) { this.seed = seed; this.probScale = probScale; this.reset(); }
+  reset() {
+    this.rng = new Rng(this.seed);
+    this.seqNo = 0;
+    this.autoTime = new Date(2026, 10, 8, 9, 0, 0).getTime();
+    this.manualTime = this.autoTime;
+    this.records = [];
+    this.autoEventCount = 0;
+    this.manualEventCount = 0;
+  }
+  step() {
+    const g = this.rng;
+    this.seqNo += 1;
+    const idx = this.seqNo;
+    // 데이터 축적에 따른 공정 안정화 계수 (1.0 → 0.50)
+    const stab = 0.50 + 0.50 * Math.exp(-idx / 65.0);
+    const lotNo = Math.min(4, Math.floor((idx - 1) / 50) + 1);
+
+    // 1. 스마트공장 돌발 이벤트 (데이터 축적 레벨이 높을수록 발생확률 감소)
+    let aSt = null, aName = "정상가동", aAct = "정상 통과 (무지연)", aDelay = 0.0;
+    for (const ev of EVENT_CATALOG) {
+      const effP = Math.min(0.85, ev.p * stab * this.probScale);
+      if (g.random() < effP) {
+        aSt = ev.st; aName = ev.name; aAct = ev.autoAct;
+        aDelay = rnd(ev.aDelay + g.uniform(-0.2, 0.3), 2);
+        this.autoEventCount += 1;
+        break;
+      }
+    }
+    // 2. 수작업 돌발 이벤트 (예지보전 없음 → 높은 확률 유지)
+    let mStage = null, mName = "정상작업", mAct = "정상 수작업", mDelay = 0.0;
+    for (let i = 0; i < EVENT_CATALOG.length; i++) {
+      const ev = EVENT_CATALOG[i];
+      const effMp = Math.min(0.90, ev.p * 1.25 * this.probScale);
+      if (g.random() < effMp) {
+        mStage = i; mName = ev.name; mAct = ev.manAct;
+        mDelay = rnd(ev.mDelay + g.uniform(-1.5, 2.5), 2);
+        this.manualEventCount += 1;
+        break;
+      }
+    }
+
+    const baseCt = 11.30 + 1.30 * Math.exp(-idx / 60.0);
+    const autoCt = rnd(baseCt + g.normal(0, 0.08 * stab) + aDelay, 2);
+    const ts = fmtTime(this.autoTime);
+    this.autoTime += autoCt * 1000;
+    const manualCt = rnd(24.50 + g.normal(0, 1.35) + mDelay, 2);
+    this.manualTime += manualCt * 1000;
+
+    // 자동화 H/W 측정값
+    const sol = rnd(15.20 + g.normal(0, 0.22 * stab), 2);
+    const posOff = rnd(g.normal(0.0, 0.012 * stab), 4);
+    const pres = rnd(6.00 + g.normal(0, 0.04 * stab), 3);
+    const spd = rnd(250.0 + g.normal(0, 2.5 * stab), 1);
+    const vision = clip(rnd(98.90 - 0.65 * Math.exp(-idx / 60.0) + g.normal(0, 0.18 * stab), 2), 97.80, 99.90);
+    const visErr = rnd(Math.abs(g.normal(0.018 * stab, 0.006)), 4);
+    const torque = rnd(45.00 + g.normal(0, 0.25 * stab), 2);
+    const angle = rnd(90.00 + g.normal(0, 0.60 * stab), 2);
+    const fp = aSt ? "OK (자동복구완료)" : "OK (정상체결)";
+    const wka = rnd(8.50 + g.normal(0, 0.05 * stab), 3);
+    const wv = rnd(22.40 + g.normal(0, 0.12 * stab), 2);
+    const wq = clip(rnd(99.10 - 0.50 * Math.exp(-idx / 70.0) + g.normal(0, 0.15 * stab), 2), 98.00, 99.95);
+    const plc = rnd(2.40 + g.normal(0, 0.08), 2);
+    const edge = rnd(4.80 + g.normal(0, 0.25), 2);
+    const servo = rnd(62.0 + g.normal(0, 1.4 * stab), 2);
+    const repeat = rnd(0.020 + Math.abs(g.normal(0, 0.004 * stab)), 4);
+    const inv = rnd(50.00 + g.normal(0, 0.06 * stab), 2);
+    const conv = rnd(inv * 0.30, 2);
+
+    // 수작업 측정값 (사고 시 편차 확대)
+    const em = mStage !== null ? 1.6 : 1.0;
+    const mClamp = rnd(38.0 + g.normal(0, 3.2 * em), 2);
+    const mPres = rnd(5.85 + g.normal(0, 0.28 * em), 3);
+    const mPos = rnd(g.normal(0.0, 0.14 * em), 4);
+    const mTorque = rnd(44.80 + g.normal(0, 1.35 * em), 2);
+    const mAngle = rnd(89.50 + g.normal(0, 3.80 * em), 2);
+    const mWka = rnd(8.45 + g.normal(0, 0.32 * em), 3);
+    const mWq = clip(rnd(93.20 + g.normal(0, 1.40 * em), 2), 88.5, 96.5);
+    const mInsp = clip(rnd(92.40 + g.normal(0, 1.50 * em), 2), 88.0, 96.0);
+    const mConv = rnd(7.20 + g.normal(0, 0.85), 2);
+
+    const row = {
+      seq_no: idx, timestamp: ts,
+      work_order_id: `WO-20261108-${pad(lotNo)}`,
+      lot_level: lotNo, lot_stage_label: LOT_NAMES[lotNo],
+      part_id: `SUBFRAME-BRK-${String(idx).padStart(4, "0")}`,
+      auto_event_station: aSt, auto_event_name: aName, auto_recovery_action: aAct, auto_delay_sec: aDelay,
+      manual_event_stage: mStage, manual_event_name: mName, manual_recovery_action: mAct, manual_delay_sec: mDelay,
+      sol_valve_resp_ms: sol, sensor_pos_offset_mm: posOff, actuator_pressure_bar: pres, actuator_speed_mm_s: spd,
+      vision_score_pct: vision, vision_dim_err_mm: visErr, fastening_torque_nm: torque, fastening_angle_deg: angle,
+      fool_proof_status: fp, welder_current_ka: wka, welder_voltage_v: wv, weld_quality_idx: wq,
+      ls_plc_scan_ms: plc, servo_load_pct: servo, inverter_freq_hz: inv, conveyor_speed_m_min: conv,
+      robot_repeatability_mm: repeat, edge_hub_latency_ms: edge, cycle_time_sec: autoCt,
+      manual_clamp_resp_ms: mClamp, manual_pressure_bar: mPres, manual_pos_offset_mm: mPos,
+      manual_torque_nm: mTorque, manual_angle_deg: mAngle, manual_weld_ka: mWka,
+      manual_weld_quality_idx: mWq, manual_inspection_pct: mInsp, manual_conveyor_m_min: mConv,
+      manual_cycle_time_sec: manualCt,
+    };
+    this.records.push(row);
+    return row;
+  }
+  col(key) { return this.records.map(r => r[key]); }
+  mean(key) { const a = this.col(key); return a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0; }
+  std(key) {
+    const a = this.col(key); if (a.length < 2) return 0;
+    const m = this.mean(key);
+    return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1));
+  }
+  toCSV() {
+    if (!this.records.length) return "";
+    const cols = Object.keys(this.records[0]).filter(c => !DROP_COLS.includes(c));
+    const esc = v => { const s = v === null || v === undefined ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [cols.join(",")];
+    for (const r of this.records) lines.push(cols.map(c => esc(r[c])).join(","));
+    return "\ufeff" + lines.join("\r\n");
+  }
+}
+
+/* ===================== 차트 렌더러 (외부 라이브러리 없이) ===================== */
+function niceStep(range, count) {
+  const raw = range / count;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const n = raw / mag;
+  return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * mag;
+}
+function ticks(min, max, count) {
+  const st = niceStep(max - min, count);
+  const out = [];
+  for (let v = Math.ceil(min / st - 1e-9) * st; v <= max + 1e-9; v += st) out.push(+v.toFixed(10));
+  return { list: out, step: st };
+}
+function drawChart(ctx, box, o) {
+  const th = o.theme;
+  const { x, y, w, h } = box;
+  const s = o.scale || 1;
+  const padL = o.padL * s, padR = 12 * s, padT = o.padT * s, padB = o.padB * s;
+  const px = x + padL, py = y + padT, pw = w - padL - padR, ph = h - padT - padB;
+
+  ctx.fillStyle = th.panel; ctx.fillRect(x, y, w, h);
+  if (th.panelBorder) { ctx.strokeStyle = th.panelBorder; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1); }
+
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = th.title; ctx.font = `700 ${o.titleSize * s}px ${FONT}`;
+  ctx.fillText(o.title, px + pw / 2, y + padT / 2, w - 16 * s);
+
+  ctx.fillStyle = th.plot; ctx.fillRect(px, py, pw, ph);
+
+  const n = o.n;
+  const xmax = Math.max(n, 10) + 1, xmin = 0;
+  const sx = v => px + (v - xmin) / (xmax - xmin) * pw;
+  const sy = v => py + ph - (v - o.ymin) / (o.ymax - o.ymin) * ph;
+
+  // 그리드 + 눈금
+  ctx.font = `${o.tickSize * s}px ${FONT}`;
+  ctx.fillStyle = th.tick; ctx.strokeStyle = th.grid; ctx.lineWidth = Math.max(1, 0.8 * s);
+  const yt = ticks(o.ymin, o.ymax, 5);
+  const ydec = yt.step < 1 ? 1 : 0;
+  ctx.textAlign = "right";
+  for (const v of yt.list) {
+    const yy = Math.round(sy(v)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(px, yy); ctx.lineTo(px + pw, yy); ctx.stroke();
+    ctx.fillText(v.toFixed(ydec), px - 5 * s, yy);
+  }
+  const xt = ticks(0, xmax - 1, 6);
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (const v of xt.list) {
+    const xx = Math.round(sx(v)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(xx, py); ctx.lineTo(xx, py + ph); ctx.stroke();
+    ctx.fillText(String(Math.round(v)), xx, py + ph + 4 * s);
+  }
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(px, py, pw, ph); ctx.clip();
+  if (o.band) {
+    ctx.globalAlpha = o.band.alpha; ctx.fillStyle = o.band.color;
+    ctx.fillRect(px, sy(o.band.hi), pw, sy(o.band.lo) - sy(o.band.hi));
+    ctx.globalAlpha = 1;
+  }
+  if (o.hline !== undefined) {
+    ctx.strokeStyle = th.hline; ctx.globalAlpha = 0.6; ctx.lineWidth = 1 * s; ctx.setLineDash([2 * s, 3 * s]);
+    ctx.beginPath(); ctx.moveTo(px, sy(o.hline)); ctx.lineTo(px + pw, sy(o.hline)); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+  }
+  for (const ser of o.series) {
+    const d = ser.data;
+    ctx.globalAlpha = ser.alpha;
+    if (ser.type === "bar") {
+      ctx.fillStyle = ser.color;
+      for (let i = 0; i < d.length; i++) {
+        if (!d[i]) continue;
+        const xv = i + 1;
+        const x1 = sx(xv - 0.5), x2 = sx(xv + 0.5);
+        ctx.fillRect(x1, sy(d[i]), Math.max(1, x2 - x1), sy(0) - sy(d[i]));
+      }
+    } else if (d.length) {
+      ctx.strokeStyle = ser.color; ctx.lineWidth = ser.lw * s; ctx.lineJoin = "round";
+      ctx.setLineDash(ser.dash ? [4 * s, 2.5 * s] : []);
+      ctx.beginPath();
+      d.forEach((v, i) => { const xx = sx(i + 1), yy = sy(v); i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); });
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+
+  // 축 테두리 (상단 제외)
+  ctx.strokeStyle = th.spine; ctx.lineWidth = 1 * s;
+  ctx.beginPath();
+  ctx.moveTo(px, py); ctx.lineTo(px, py + ph); ctx.lineTo(px + pw, py + ph); ctx.lineTo(px + pw, py);
+  ctx.stroke();
+
+  if (o.xlabel) {
+    ctx.fillStyle = th.label; ctx.font = `${o.labelSize * s}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.fillText(o.xlabel, px + pw / 2, py + ph + (o.tickSize + 10) * s);
+  }
+  if (o.ylabel) {
+    ctx.save(); ctx.translate(x + 14 * s, py + ph / 2); ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = th.label; ctx.font = `700 ${o.labelSize * s}px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(o.ylabel, 0, 0); ctx.restore();
+  }
+
+  // 범례
+  if (n && o.legend !== false) {
+    const items = [];
+    if (o.band && o.band.label) items.push({ type: "bar", color: o.band.color, alpha: 0.25, label: o.band.label });
+    for (const ser of o.series) items.push(ser);
+    ctx.font = `${o.legendSize * s}px ${FONT}`;
+    const lh = o.legendSize * 1.45 * s, sw = 18 * s;
+    const tw = Math.max(...items.map(it => ctx.measureText(it.label).width));
+    const bw = tw + sw + 16 * s, bh = items.length * lh + 8 * s;
+    const bx = px + pw - bw - 6 * s;
+    const by = o.legendPos === "lower" ? py + ph - bh - 6 * s : py + 6 * s;
+    ctx.globalAlpha = 0.9; ctx.fillStyle = th.legendBg; ctx.fillRect(bx, by, bw, bh); ctx.globalAlpha = 1;
+    ctx.strokeStyle = th.legendBorder; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+    items.forEach((it, i) => {
+      const cy = by + 4 * s + lh * i + lh / 2;
+      ctx.globalAlpha = it.type === "bar" ? Math.max(it.alpha, 0.5) : 1;
+      if (it.type === "bar") { ctx.fillStyle = it.color; ctx.fillRect(bx + 6 * s, cy - 4 * s, sw, 8 * s); }
+      else {
+        ctx.strokeStyle = it.color; ctx.lineWidth = it.lw * s; ctx.setLineDash(it.dash ? [4 * s, 2.5 * s] : []);
+        ctx.beginPath(); ctx.moveTo(bx + 6 * s, cy); ctx.lineTo(bx + 6 * s + sw, cy); ctx.stroke(); ctx.setLineDash([]);
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = th.legendText; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      ctx.fillText(it.label, bx + sw + 11 * s, cy);
+    });
+  }
+}
+
+const DARK_THEME = {
+  panel: "#0F172A", plot: "#0F172A", grid: "#1E293B", tick: "#94A3B8", spine: "#334155",
+  title: "#E2E8F0", label: "#94A3B8", hline: "#E2E8F0",
+  legendBg: "#0F172A", legendBorder: "#334155", legendText: "#F8FAFC",
+};
+const LIGHT_THEME = {
+  panel: "#FFFFFF", panelBorder: "#E2E8F0", plot: "#FFFFFF", grid: "#E2E8F0", tick: "#475569", spine: "#334155",
+  title: "#1E293B", label: "#1E293B", hline: "#0F172A",
+  legendBg: "#FFFFFF", legendBorder: "#CBD5E1", legendText: "#1E293B",
+};
+
+/* ===================== 6분할 보고서 차트 (PNG) ===================== */
+function renderDashboard(engine) {
+  const W = 1800, H = 1150;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#F8FAFC"; ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = "#0F172A"; ctx.font = `700 26px ${FONT}`;
+  ctx.fillText("스마트공장 설비진단 — [비자동화(수작업) vs 자동화 H/W 공급] 돌발 지연·Fool Proof 자동 복구 비교 분석", W / 2, 44, W - 60);
+  ctx.fillStyle = "#334155"; ctx.font = `700 15px ${FONT}`;
+  ctx.fillText(`주황 점선: 비자동화(돌발 사고 시 수동 수리로 큰 지연)  vs  파랑/초록 실선: 자동화 H/W 공급(센서·인터록 기반 1~2초 내 즉시 자동 복구, N=${engine.records.length})`, W / 2, 84, W - 60);
+
+  const C = { blue: "#1D4ED8", green: "#059669", teal: "#0D9488", orange: "#EA580C" };
+  const n = engine.records.length;
+  const c = k => engine.col(k);
+  const man = (k, label, lw = 1.3, a = 0.7) => ({ type: "line", data: c(k), color: C.orange, lw, dash: true, alpha: a, label });
+  const auto = (k, color, label) => ({ type: "line", data: c(k), color, lw: 2.0, alpha: 0.95, label });
+
+  const panels = [
+    { title: "① 클램핑 고정 압력 비교: 수동 클램프 vs 솔밸브·액추에이터 자동 복구", ylabel: "클램핑 압력 (bar)", ymin: 4.8, ymax: 6.9, hline: 6.0,
+      series: [man("manual_pressure_bar", "[비자동화] 수동 클램프 압력 (편차 큼)", 1.2, 0.65), auto("actuator_pressure_bar", C.teal, "[자동화 H/W] 솔밸브·액추에이터 압력 (자동 재클램핑 복구)")] },
+    { title: "② 조립 볼트 체결 토크 비교: 수동 체결 vs Fool Proof 자동 재체결", ylabel: "체결 토크 (N·m)", ymin: 39.5, ymax: 50.5,
+      band: { lo: 44.2, hi: 45.8, color: C.blue, alpha: 0.08, label: "Fool Proof 정상 공차 대역" },
+      series: [man("manual_torque_nm", "[비자동화] 수동 렌치 토크 (볼트 헛돌기 시 큰 흔들림)", 1.2, 0.65), auto("fastening_torque_nm", C.blue, "[자동화 H/W] Fool Proof 로봇 역회전 후 정밀 재체결 (45.0 N·m)")] },
+    { title: "③ 브라켓 용접 품질 비교: 수동 용접 vs 스마트 용접기 자동 보정", ylabel: "용접 품질 지수 (%)", ymin: 87.0, ymax: 100.5, legendPos: "lower",
+      series: [man("manual_weld_quality_idx", "[비자동화] 수동 용접 품질 (팁 오염 시 품질 급락)"), auto("weld_quality_idx", C.green, "[자동화 H/W] 스마트 용접기 (자동 팁 드레싱 & 전류 보상)")] },
+    { title: "④ 외관·동심도 검사 비교: 육안 검사 vs 에어블로워·비전 자동 재검", ylabel: "검사 일치율 / 정확도 (%)", ymin: 87.0, ymax: 100.5, legendPos: "lower",
+      series: [man("manual_inspection_pct", "[비자동화] 작업자 육안 검사 정확도"), auto("vision_score_pct", C.blue, "[자동화 H/W] 에어블로워 세척 + 3D 비전 재스캔 (98.8%)")] },
+    { title: "⑤ 돌발 사고·지연 발생 시 후속 조치 복구 시간 비교 (수동 수리 vs 자동 복구)", ylabel: "돌발 복구 지연 시간 (sec)", ymin: 0, ymax: 19.5,
+      series: [
+        { type: "bar", data: c("manual_delay_sec"), color: C.orange, alpha: 0.55, label: "[비자동화] 수동 복구 지연 시간 (발생 시 +9~16초 정체)" },
+        { type: "bar", data: c("auto_delay_sec"), color: C.blue, alpha: 0.9, label: "[자동화 H/W] Fool Proof 자동 복구 지연 (+1.3~2.1초 즉시 해결)" }] },
+    { title: "⑥ 돌발 지연을 포함한 개당 총 생산 사이클 타임 비교", ylabel: "총 사이클 타임 (sec, 낮을수록 빠름)", ymin: 9.0, ymax: 44.0,
+      series: [man("manual_cycle_time_sec", "[비자동화] 전체 사이클 타임 (수동 복구 피크 다발)", 1.2), auto("cycle_time_sec", C.green, "[자동화 H/W] 전체 사이클 타임 (예지보전으로 지연 빈도 감소)")] },
+  ];
+  const left = 40, top = 116, gapX = 30, gapY = 24;
+  const pw = (W - left * 2 - gapX) / 2, ph = (H - top - 30 - gapY * 2) / 3;
+  panels.forEach((p, i) => {
+    const col = i % 2, row = Math.floor(i / 2);
+    drawChart(ctx, { x: left + col * (pw + gapX), y: top + row * (ph + gapY), w: pw, h: ph }, {
+      ...p, n, theme: LIGHT_THEME, xlabel: "생산 시퀀스 (EA)",
+      padL: 74, padT: 40, padB: 50, titleSize: 17, tickSize: 12, labelSize: 13, legendSize: 12,
+    });
+  });
+  return cv;
+}
+
+/* ===================== 게임 앱 ===================== */
+const W = 1000, H = 535;
+const MANUAL_STATIONS = [
+  [130, "👷 수동 바이스 고정", "틀어지면 수동 재조립"],
+  [215, "👷 수동 렌치 체결", "헛돌면 수공구 분해"],
+  [300, "👷 수동 용접기 작업", "팁 오염 시 사포질"],
+  [385, "👷 돋보기 육안 검사", "이물질 손으로 세척"],
+];
+
+class App {
+  constructor() {
+    this.engine = new Engine(42, 1.0);
+    this.running = false;
+    this.target = 200;
+    this.speed = 2.0;
+    this.tick = 0;
+    this.belt = [[345, 135], [510, 135], [725, 135], [885, 135], [885, 405], [725, 405], [510, 405], [350, 405]];
+    this.segLens = []; this.cum = [0];
+    let tot = 0;
+    for (let i = 0; i < this.belt.length - 1; i++) {
+      const l = Math.hypot(this.belt[i + 1][0] - this.belt[i][0], this.belt[i + 1][1] - this.belt[i][1]);
+      this.segLens.push(l); tot += l; this.cum.push(tot);
+    }
+    this.total = tot;
+    this.stops = [[1, this.cum[1]], [2, this.cum[2]], [5, this.cum[5]], [6, this.cum[6]]];
+
+    this.cv = document.getElementById("floor");
+    this.ctx = this.cv.getContext("2d");
+    this.mini = ["mini-torque", "mini-delay", "mini-ct"].map(id => document.getElementById(id));
+    this.tbody = document.getElementById("log-body");
+    this.logWrap = document.getElementById("log-wrap");
+
+    this.resetState();
+    this.bindUI();
+    this.setupCanvas();
+    this.updateCards(null);
+    this.renderTableEmpty();
+    this.updateMiniCharts();
+
+    let last = 0;
+    const loop = t => {
+      if (t - last >= 30) { last = t; this.frame(); }
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }
+
+  resetState() {
+    this.autoParts = []; this.manualParts = [];
+    this.manualCompleted = 0; this.autoCompleted = 0;
+    this.cdAuto = 0; this.cdManual = 0;
+    this.lastRow = null;
+    this.robNut = [725, 135]; this.robW1 = [725, 390]; this.robW2 = [725, 420]; this.robUnload = [375, 405];
+    this.turntable = 0; this.truckBounce = 0;
+    this.sparks = []; this.packets = []; this.popups = [];
+  }
+
+  setupCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.cv.width = W * dpr; this.cv.height = H * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ro = new ResizeObserver(() => this.updateMiniCharts());
+    this.mini.forEach(c => ro.observe(c));
+  }
+
+  bindUI() {
+    this.btnPlay = document.getElementById("btn-play");
+    this.btnPlay.onclick = () => this.togglePlay();
+    document.getElementById("btn-spawn").onclick = () => this.spawnAuto();
+    document.getElementById("btn-instant").onclick = () => this.instantFinish();
+    document.getElementById("btn-reset").onclick = () => this.reset();
+    document.getElementById("btn-csv").onclick = () => this.exportCSV();
+    document.getElementById("btn-png").onclick = () => this.exportPNG();
+    document.getElementById("m-csv").onclick = () => this.exportCSV();
+    document.getElementById("m-png").onclick = () => this.exportPNG();
+    document.getElementById("m-close").onclick = () => this.closeModal();
+    document.getElementById("modal").addEventListener("click", e => { if (e.target.id === "modal") this.closeModal(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") this.closeModal(); });
+
+    document.querySelectorAll(".chip.speed").forEach(b => b.onclick = () => {
+      this.speed = parseFloat(b.dataset.speed);
+      document.querySelectorAll(".chip.speed").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    });
+    document.querySelectorAll(".chip.prob").forEach(b => b.onclick = () => {
+      this.engine.probScale = parseFloat(b.dataset.prob);
+      document.getElementById("lbl-prob").textContent = `[${b.dataset.label}]`;
+      document.querySelectorAll(".chip.prob").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    });
+  }
+
+  setPlayButton(running) {
+    this.btnPlay.textContent = running ? "⏸ 일시정지" : (this.engine.seqNo > 0 && this.engine.seqNo < this.target ? "▶ 공장 가동 재개" : "▶ 공장 가동 시작");
+    this.btnPlay.style.background = running ? "#EF4444" : "#10B981";
+  }
+
+  togglePlay() {
+    if (this.running) { this.running = false; }
+    else {
+      if (this.engine.seqNo >= this.target && !this.autoParts.length) this.reset();
+      this.running = true;
+    }
+    this.setPlayButton(this.running);
+  }
+
+  spawnAuto() {
+    if (this.engine.seqNo >= this.target) return;
+    if (this.autoParts.length && this.autoParts[this.autoParts.length - 1].dist < 68) return;
+    const row = this.engine.step();
+    this.autoParts.push({ dist: 0, done: new Set(), dwell: 0, cur: null, inRec: false, clamped: false, bolts: 0, welds: 0, scanned: false, row });
+  }
+
+  spawnManual() {
+    if (this.manualParts.length && this.manualParts[this.manualParts.length - 1].y < 145) return;
+    let fs = null, fn = "";
+    for (let i = 0; i < EVENT_CATALOG.length; i++) {
+      if (Math.random() < Math.min(0.90, EVENT_CATALOG[i].p * 1.25 * this.engine.probScale)) { fs = i; fn = EVENT_CATALOG[i].name; break; }
+    }
+    this.manualParts.push({ y: 85, dwell: 0, done: new Set(), faultStage: fs, faultName: fn });
+  }
+
+  distToXY(d) {
+    d = clip(d, 0, this.total);
+    for (let i = 0; i < this.segLens.length; i++) {
+      const sd = this.cum[i], l = this.segLens[i];
+      if (d <= sd + l || i === this.segLens.length - 1) {
+        const r = l > 0 ? (d - sd) / l : 0;
+        const [x1, y1] = this.belt[i], [x2, y2] = this.belt[i + 1];
+        return [x1 + (x2 - x1) * r, y1 + (y2 - y1) * r];
+      }
+    }
+    return this.belt[this.belt.length - 1];
+  }
+
+  /* ---------- 그리기 도우미 ---------- */
+  R(x1, y1, x2, y2, fill, stroke, lw) {
+    const c = this.ctx; c.beginPath(); c.rect(x1, y1, x2 - x1, y2 - y1);
+    if (fill) { c.fillStyle = fill; c.fill(); }
+    if (stroke && lw) { c.lineWidth = lw; c.strokeStyle = stroke; c.stroke(); }
+  }
+  O(x1, y1, x2, y2, fill, stroke, lw) {
+    const c = this.ctx; c.beginPath();
+    c.ellipse((x1 + x2) / 2, (y1 + y2) / 2, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2, 0, 0, Math.PI * 2);
+    if (fill) { c.fillStyle = fill; c.fill(); }
+    if (stroke && lw) { c.lineWidth = lw; c.strokeStyle = stroke; c.stroke(); }
+  }
+  L(pts, color, w, opt = {}) {
+    const c = this.ctx; c.beginPath(); c.moveTo(pts[0], pts[1]);
+    for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]);
+    c.setLineDash(opt.dash || []); c.lineCap = opt.cap || "butt"; c.lineJoin = "round";
+    c.strokeStyle = color; c.lineWidth = w; c.stroke(); c.setLineDash([]);
+  }
+  T(x, y, txt, color, size, bold = true, maxW) {
+    const c = this.ctx;
+    c.font = `${bold ? "700 " : ""}${size}px ${FONT}`;
+    c.fillStyle = color; c.textAlign = "center"; c.textBaseline = "middle";
+    const lines = String(txt).split("\n"), lh = size * 1.25, y0 = y - (lines.length - 1) * lh / 2;
+    lines.forEach((ln, i) => maxW ? c.fillText(ln, x, y0 + i * lh, maxW) : c.fillText(ln, x, y0 + i * lh));
+  }
+
+  drawPart(x, y, seq, { clamped = false, bolts = 0, welds = 0, scanned = false, inRec = false, manual = false } = {}) {
+    const wheel = manual ? "#57534E" : "#334155";
+    for (const [wx, wy] of [[-18, -17], [18, -17], [-18, 17], [18, 17]]) this.O(x + wx - 6, y + wy - 4, x + wx + 6, y + wy + 4, wheel, "#0F172A", 1.5);
+    let body, border;
+    if (inRec) { body = "#F59E0B"; border = "#B45309"; }
+    else if (manual) { body = "#D6D3D1"; border = "#78716C"; }
+    else if (scanned) { body = "#3B82F6"; border = "#1D4ED8"; }
+    else if (welds > 0) { body = "#8B5CF6"; border = "#5B21B6"; }
+    else if (clamped) { body = "#14B8A6"; border = "#0F766E"; }
+    else { body = "#94A3B8"; border = "#475569"; }
+    this.R(x - 25, y - 14, x + 25, y + 14, body, border, 2.5);
+    this.R(x - 14, y - 8, x + 14, y + 8, "#F8FAFC", border, 1.5);
+    const bo = [[-19, -9], [19, -9], [19, 9], [-19, 9]];
+    for (let i = 0; i < Math.min(4, bolts); i++) this.O(x + bo[i][0] - 4, y + bo[i][1] - 4, x + bo[i][0] + 4, y + bo[i][1] + 4, "#FACC15", "#854D0E", 1.5);
+    if (welds > 0) this.O(x - 7, y - 7, x + 7, y + 7, "#F97316", "#FFFBEB", 1.5);
+    if (scanned) { this.O(x + 14, y - 20, x + 28, y - 6, "#10B981", "#FFFFFF", 1.5); this.T(x + 21, y - 13, "✔", "#FFFFFF", 10); }
+    this.T(x, y, manual ? "수동" : `#${seq}`, "#0F172A", 9);
+  }
+
+  drawRobot(bx, by, tx, ty, color, name, active = false, rec = false, tool = "bolt") {
+    const L1 = 50, L2 = 46;
+    const dist = clip(Math.hypot(tx - bx, ty - by), 14, L1 + L2 - 2);
+    const cosA = clip((L1 * L1 + dist * dist - L2 * L2) / (2 * L1 * dist), -1, 1);
+    const ae = Math.atan2(ty - by, tx - bx) - Math.acos(cosA);
+    const ex = bx + L1 * Math.cos(ae), ey = by + L1 * Math.sin(ae);
+    this.L([bx, by, ex, ey], "#334155", 12, { cap: "round" });
+    this.L([bx, by, ex, ey], rec ? "#F59E0B" : color, 7, { cap: "round" });
+    this.O(ex - 7, ey - 7, ex + 7, ey + 7, "#FFFFFF", "#334155", 2);
+    this.L([ex, ey, tx, ty], "#334155", 9, { cap: "round" });
+    this.L([ex, ey, tx, ty], "#F8FAFC", 5, { cap: "round" });
+    this.O(bx - 20, by - 20, bx + 20, by + 20, color, "#1E293B", 2.5);
+    this.R(bx - 13, by - 9, bx + 13, by + 5, "#0F172A", "#E2E8F0", 1);
+    const [eye, ec] = rec ? ["!  !", "#F97316"] : active ? ["^  ^", "#FDE047"] : ["●  ●", "#38BDF8"];
+    this.T(bx, by - 2, eye, ec, 9);
+    const r = (active || rec) ? 10 : 6;
+    this.O(tx - r, ty - r, tx + r, ty + r, tool === "bolt" ? "#FACC15" : "#FB7185", "#1E293B", 2);
+    this.T(bx, by + 28, name, "#1E293B", 11);
+  }
+
+  /* ---------- 프레임 ---------- */
+  frame() {
+    this.tick++;
+    const c = this.ctx, sp = this.speed, run = this.running;
+    c.clearRect(0, 0, W, H);
+    c.fillStyle = "#F8FAFC"; c.fillRect(0, 0, W, H);
+
+    // ===== 좌측: 비자동화 수작업 공방 =====
+    this.R(12, 10, 265, H - 10, "#FFF7ED", "#FB923C", 2.5);
+    this.R(12, 10, 265, 42, "#EA580C");
+    this.T(138, 26, "🐢 [비자동화] 수작업 공방 (수동 수리 지연)", "#FFFFFF", 12, true, 245);
+    this.R(73, 70, 117, 465, "#E7E5E4", "#78716C", 2);
+    for (let ry = 80; ry < 460; ry += 22) this.L([75, ry, 115, ry], "#A8A29E", 2);
+    for (const [sy, t1, t2] of MANUAL_STATIONS) {
+      this.R(128, sy - 26, 255, sy + 26, "#FFEDD5", "#F97316", 1.5);
+      this.T(191, sy - 9, t1, "#9A3412", 11, true, 122);
+      this.T(191, sy + 10, t2, "#C2410C", 10, false, 122);
+    }
+
+    if (run) {
+      this.cdManual -= sp;
+      if (this.cdManual <= 0 && this.engine.seqNo < this.target) { this.spawnManual(); this.cdManual = 115; }
+    }
+    const keepM = [];
+    this.manualParts.forEach((mp, i) => {
+      const blocked = i > 0 && (this.manualParts[i - 1].y - mp.y < 58);
+      let stopped = false, fault = false;
+      for (let s = 0; s < MANUAL_STATIONS.length; s++) {
+        const sy = MANUAL_STATIONS[s][0];
+        if (!mp.done.has(s) && Math.abs(mp.y - sy) < 4) {
+          stopped = true; mp.y = sy; fault = mp.faultStage === s;
+          const req = fault ? 56 : 24;
+          if (run) mp.dwell += sp;
+          if (fault) {
+            this.R(126, sy - 28, 257, sy + 28, null, "#DC2626", 3);
+            this.T(160, sy - 36, `🚨사고: ${mp.faultName}! 수동수리중(+14s)`, "#DC2626", 10, true, 240);
+          } else {
+            this.T(145, sy - 34, "💦수작업 진행중..", "#EA580C", 10);
+          }
+          if (mp.dwell >= req) { mp.done.add(s); mp.dwell = 0; stopped = false; }
+          break;
+        }
+      }
+      if (run && !stopped && !blocked) {
+        let ny = mp.y + 1.45 * sp;
+        // 고배속에서도 작업대를 건너뛰지 않도록 다음 작업대에서 정지
+        for (let s = 0; s < MANUAL_STATIONS.length; s++) {
+          const sy = MANUAL_STATIONS[s][0];
+          if (!mp.done.has(s) && mp.y < sy && ny >= sy) { ny = sy; break; }
+        }
+        mp.y = ny;
+      }
+      this.drawPart(95, mp.y, 0, { inRec: fault, manual: true });
+      if (mp.y < 455) keepM.push(mp); else this.manualCompleted++;
+    });
+    this.manualParts = keepM;
+
+    this.R(28, 468, 250, 515, "#FDE68A", "#D97706", 2);
+    this.T(139, 491, `📦 수작업 출하: ${this.manualCompleted}개 | 🚨사고지연: ${this.engine.manualEventCount}건`, "#78350F", 11, true, 214);
+
+    // ===== 우측: 스마트 로봇 공장 =====
+    this.R(278, 10, W - 12, H - 10, "#F0FDF4", "#10B981", 2.5);
+    this.R(278, 10, W - 12, 42, "#059669");
+    this.T(635, 26, "🚀 [자동화 H/W 공급] 돌발 지연 시 센서·인터록이 즉시 감지 → 1~2초 내 자동 후속 조치(재클램핑·역회전 재체결·팁드레싱·에어세척)", "#FFFFFF", 12, true, 690);
+    for (let gx = 290; gx < W - 15; gx += 45) this.L([gx, 44, gx, H - 12], "#DCFCE7", 1);
+    for (let gy = 50; gy < H - 12; gy += 45) this.L([280, gy, W - 14, gy], "#DCFCE7", 1);
+
+    const bw = 24;
+    this.R(325, 135 - bw, 885 + bw, 135 + bw, "#334155", "#FACC15", 2.5);
+    this.R(885 - bw, 135 - bw, 885 + bw, 405 + bw, "#334155", "#FACC15", 2.5);
+    this.R(340, 405 - bw, 885 + bw, 405 + bw, "#334155", "#FACC15", 2.5);
+    this.R(328, 135 - bw + 3, 885 + bw - 3, 135 + bw - 3, "#475569");
+    this.R(885 - bw + 3, 135 - bw + 3, 885 + bw - 3, 405 + bw - 3, "#475569");
+    this.R(340, 405 - bw + 3, 885 + bw - 3, 405 + bw - 3, "#475569");
+
+    const shift = Math.floor((this.tick * 2.8 * sp) % 36);
+    for (let rx = 345; rx < 860; rx += 36) {
+      const bx = rx + shift;
+      this.L([bx, 122, bx + 9, 135, bx, 148], "#94A3B8", 2.5);
+      const bo = 870 - (rx - 345 + shift);
+      this.L([bo, 392, bo - 9, 405, bo, 418], "#38BDF8", 2.5);
+    }
+    for (let ry = 150; ry < 380; ry += 36) {
+      const by = ry + shift;
+      this.L([872, by, 885, by + 9, 898, by], "#94A3B8", 2.5);
+    }
+    for (const [cx, cy] of [[885, 135], [885, 405]]) this.O(cx - 14, cy - 14, cx + 14, cy + 14, "#1E293B", "#38BDF8", 2);
+
+    this.R(292, 102, 345, 168, "#0284C7", "#0F172A", 2);
+    this.T(318, 135, "부품투입\nIN ➔", "#FFFFFF", 11);
+
+    if (this.truckBounce > 0) this.truckBounce = Math.max(0, this.truckBounce - 1);
+    const tb = Math.trunc(Math.sin(this.truckBounce) * 3);
+    this.R(286, 368 + tb, 362, 442 + tb, "#FACC15", "#854D0E", 2.5);
+    this.R(286, 378 + tb, 310, 432 + tb, "#38BDF8", "#1E293B", 1.5);
+    this.T(336, 405 + tb, `🚚 출하트럭\n${this.autoCompleted}개 적재!`, "#1E293B", 10, true, 50);
+
+    // 중앙 관제소
+    const hx = 615, hy = 270;
+    this.R(hx - 155, hy - 40, hx + 155, hy + 40, "#1E293B", "#38BDF8", 2.5);
+    const lvl = this.lastRow ? this.lastRow.lot_stage_label : LOT_NAMES[1];
+    this.T(hx, hy - 18, `📡 LS PLC & Edge Hub 예지보전 센터 [${lvl}]`, "#FDE047", 12, true, 296);
+    const recTxt = (this.lastRow && this.lastRow.auto_event_station)
+      ? `최근 후속 조치: [${this.lastRow.auto_event_name}] ➔ ${this.lastRow.auto_recovery_action}`
+      : `누적 자동 복구: ${this.engine.autoEventCount}건 (데이터 축적으로 이상 발생확률 지속 감소 중!)`;
+    this.T(hx, hy + 10, recTxt, "#A7F3D0", 11, true, 296);
+    for (const [sx, sy] of [[510, 135], [725, 135], [725, 405], [510, 405]]) this.L([sx, sy, hx, hy], "#93C5FD", 1.5, { dash: [4, 4] });
+
+    // 스테이션 패드
+    this.R(465, 92, 555, 178, null, "#0D9488", 2.5);
+    this.T(510, 76, "① 센서·솔밸브 공압클램프", "#0F766E", 11);
+    this.O(680, 90, 770, 180, null, "#4F46E5", 2.5);
+    this.T(725, 194, "② 로봇 4점 볼트 체결(Fool Proof)", "#3730A3", 11);
+    this.R(680, 362, 770, 448, null, "#E11D48", 2.5);
+    this.T(725, 346, "③ 쌍둥이 로봇 스마트 용접(8.5kA)", "#9F1239", 11);
+    this.R(465, 362, 555, 448, null, "#2563EB", 2.5);
+    this.T(510, 346, "④ 비전 스캔 & 에어블로워 세척", "#1D4ED8", 11);
+
+    if (run) {
+      this.cdAuto -= sp;
+      if (this.cdAuto <= 0 && this.engine.seqNo < this.target) { this.spawnAuto(); this.cdAuto = 58; }
+    }
+
+    const act = { 1: false, 2: false, 5: false, 6: false };
+    const rec = { 1: false, 2: false, 5: false, 6: false };
+    const prog = { 1: 0, 2: 0, 5: 0, 6: 0 };
+    const nextParts = [], finishedRows = [];
+
+    this.autoParts.forEach((p, idx) => {
+      const blocked = idx > 0 && (this.autoParts[idx - 1].dist - p.dist < 68);
+      if (p.cur !== null) {
+        const st = p.cur;
+        act[st] = true;
+        const ev = p.row.auto_event_station === st;
+        const req = ev ? 36 : 22; // 돌발 시 기본 작업 + 자동 복구 조치
+        if (run) p.dwell += sp;
+        const pr = Math.min(1, p.dwell / req);
+        prog[st] = pr;
+        p.inRec = ev && p.dwell > 18;
+        if (p.inRec) rec[st] = true;
+        const [px, py] = this.distToXY(p.dist);
+
+        if (ev) {
+          this.R(px - 95, py - 58, px + 95, py - 24, "#FEF3C7", "#D97706", 2);
+          if (!p.inRec) this.T(px, py - 41, `⚠ [${p.row.auto_event_name}] 감지!`, "#B45309", 11, true, 182);
+          else this.T(px, py - 41, `🛠 후속조치: ${p.row.auto_recovery_action} (+${p.row.auto_delay_sec}s)`, "#047857", 10, true, 182);
+        }
+
+        if (st === 1) { if (pr >= 0.5) p.clamped = true; }
+        else if (st === 2) {
+          this.turntable = (this.turntable + 5 * sp) % 360;
+          const bi = Math.min(3, Math.floor(pr * 4));
+          p.bolts = bi + 1;
+          const cs = [[-18, -10], [18, -10], [18, 10], [-18, 10]];
+          this.robNut = [px + cs[bi][0], py + cs[bi][1]];
+        } else if (st === 5) {
+          p.welds = Math.floor(pr * 4) + 1;
+          const wx = pr < 0.5 ? -12 : 12;
+          this.robW1 = [px + wx, py - 8]; this.robW2 = [px + wx, py + 8];
+          if (run && Math.random() < 0.7) {
+            for (const [sx, sy] of [this.robW1, this.robW2]) {
+              const a = Math.random() * Math.PI * 2, v = 2 + Math.random() * 3;
+              this.sparks.push({ x: sx, y: sy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 10 });
+            }
+          }
+        } else if (st === 6) { if (pr >= 0.6) p.scanned = true; }
+
+        if (p.dwell >= req) {
+          p.done.add(st); p.cur = null; p.dwell = 0; p.inRec = false;
+          this.packets.push({ x: px, y: py, tx: hx, ty: hy, p: 0 });
+          if (ev) this.popups.push({ x: px, y: py - 32, txt: `✔ 자동복구 완료! (${p.row.auto_recovery_action})`, col: "#D97706", life: 30 });
+        }
+      } else if (run && !blocked) {
+        let nd = p.dist + 3.8 * sp;
+        for (const [st, sd] of this.stops) {
+          if (!p.done.has(st) && p.dist < sd && sd <= nd) { nd = sd; p.cur = st; p.dwell = 0; break; }
+        }
+        p.dist = nd;
+      }
+
+      const [px, py] = this.distToXY(p.dist);
+      if (p.dist > this.cum[6] + 20) this.robUnload = [px, py];
+      this.drawPart(px, py, p.row.seq_no, { clamped: p.clamped, bolts: p.bolts, welds: p.welds, scanned: p.scanned, inRec: p.inRec });
+
+      if (p.dist < this.total) nextParts.push(p);
+      else {
+        this.popups.push({ x: 340, y: 355, txt: `🚚 #${p.row.seq_no} 출하 완료!`, col: "#2563EB", life: 26 });
+        finishedRows.push(p.row);
+      }
+    });
+    this.autoParts = nextParts;
+    finishedRows.forEach(r => this.onFinished(r));
+
+    // 스테이션 기계·로봇
+    const s1 = act[1] ? 12 : 2, s1c = rec[1] ? "#F59E0B" : "#14B8A6";
+    this.R(490, 88 + s1, 530, 104 + s1, s1c, "#0F172A", 2);
+    this.R(490, 166 - s1, 530, 182 - s1, s1c, "#0F172A", 2);
+    this.drawRobot(725, 58, this.robNut[0], this.robNut[1], "#6366F1", "체결로봇(너트러너)", act[2], rec[2], "bolt");
+    this.drawRobot(725, 315, this.robW1[0], this.robW1[1], "#F43F5E", "용접로봇 A", act[5], rec[5], "weld");
+    this.drawRobot(725, 492, this.robW2[0], this.robW2[1], "#FB7185", "용접로봇 B", act[5], rec[5], "weld");
+
+    this.O(492, 456, 528, 492, rec[6] ? "#F59E0B" : "#3B82F6", "#1E293B", 2);
+    this.T(510, 474, "📷", "#FFFFFF", 15, false);
+    this.T(510, 506, "비전 & 에어세척", "#1E293B", 11);
+    if (act[6]) {
+      const sx = 475 + Math.floor(70 * prog[6]);
+      this.L([sx, 366, sx, 444], rec[6] ? "#F59E0B" : "#10B981", 3);
+    }
+    this.drawRobot(405, 492, this.robUnload[0], this.robUnload[1], "#10B981", "출하 가이드 로봇", true, false, "grip");
+
+    // 파티클
+    this.sparks = this.sparks.filter(s => {
+      s.x += s.vx; s.y += s.vy; s.life--;
+      if (s.life > 0) this.O(s.x - 3, s.y - 3, s.x + 3, s.y + 3, "#FACC15", "#EF4444", 1);
+      return s.life > 0;
+    });
+    this.packets = this.packets.filter(k => {
+      k.p += 0.09 * Math.max(1, sp * 0.5);
+      if (k.p < 1) {
+        const cx = k.x + (k.tx - k.x) * k.p, cy = k.y + (k.ty - k.y) * k.p;
+        this.O(cx - 4, cy - 4, cx + 4, cy + 4, "#38BDF8", "#0F172A", 1.5);
+      }
+      return k.p < 1;
+    });
+    this.popups = this.popups.filter(pp => {
+      pp.y -= 0.7; pp.life--;
+      if (pp.life > 0) this.T(pp.x, pp.y, pp.txt, pp.col, 11, true, 300);
+      return pp.life > 0;
+    });
+
+    // 목표 수량 완주 시 자동 정지
+    if (this.running && this.engine.seqNo >= this.target && !this.autoParts.length) {
+      this.running = false;
+      this.setPlayButton(false);
+      this.updateMiniCharts();
+      this.showResult("🎉 200개 돌발 사고·후속 조치 비교 시뮬레이션 완료!");
+    }
+  }
+
+  /* ---------- 출하 처리 ---------- */
+  onFinished(row, { skipChart = false } = {}) {
+    this.lastRow = row;
+    this.autoCompleted = row.seq_no;
+    this.truckBounce = 8;
+    this.updateCards(row);
+    this.appendRow(row);
+    if (!skipChart && (row.seq_no % 3 === 0 || row.seq_no === this.target)) this.updateMiniCharts();
+  }
+
+  updateCards(row) {
+    const set = (id, t) => document.getElementById(id).textContent = t;
+    if (!row) {
+      set("card-speed", "🐢 수작업 공방: 0 개 출하 (돌발 사고 시 수동 수리로 정체)\n🚀 스마트 로봇공장: 0 개 출하 (자동 복구로 2.2배 고속!)");
+      set("card-event", "🐢 수작업 사고: 0건 (발생 시 +10~15초 라인 중단)\n🚀 스마트공장 감지: 0건 (Fool Proof 1~2초 내 자동 복구!)");
+      set("card-quality", "🐢 수동 재작업: 토크·용접 흔들림 잔존\n🚀 자동 재체결·팁드레싱·재스캔: 불량 유출 0% (100% OK)");
+      set("card-data", "🐢 수작업: 끝까지 사고 발생확률 동일 (개선 없음)\n🚀 스마트공장: 데이터가 쌓일수록 돌발 지연 확률 자체 감소!");
+      return;
+    }
+    const e = this.engine;
+    const mAvg = e.mean("manual_cycle_time_sec"), aAvg = e.mean("cycle_time_sec");
+    set("card-speed",
+      `🐢 수작업 공방: ${this.manualCompleted} 개 출하 (평균 ${mAvg.toFixed(1)}초)\n` +
+      `🚀 스마트 로봇공장: ${this.autoCompleted} 개 출하 (평균 ${aAvg.toFixed(2)}초 → ${(mAvg / aAvg).toFixed(1)}배 고속!)`);
+    set("card-event",
+      `🐢 수작업 누적 사고: ${e.manualEventCount}건 (최근: ${row.manual_event_name} +${row.manual_delay_sec}s)\n` +
+      `🚀 스마트공장 자동복구: ${e.autoEventCount}건 (${row.auto_recovery_action} +${row.auto_delay_sec}s)`);
+    set("card-quality",
+      `🐢 수동 재작업 후: 토크 ${row.manual_torque_nm.toFixed(2)}N·m | 용접 ${row.manual_weld_quality_idx.toFixed(1)}%\n` +
+      `🚀 자동 복구 후: 토크 ${row.fastening_torque_nm.toFixed(2)}N·m | 비전 ${row.vision_score_pct.toFixed(1)}% (100% OK)`);
+    set("card-data",
+      `🐢 수작업: 데이터 미수집 (사고 확률 끝까지 그대로)\n` +
+      `🚀 스마트공장: ${row.lot_stage_label} (데이터 축적으로 사고 확률까지 감소!)`);
+  }
+
+  renderTableEmpty() {
+    this.tbody.innerHTML = '<tr class="empty-row"><td colspan="12">▶ 공장 가동 시작 또는 ⚡ 200개 즉시 완주를 누르면 출하된 부품의 기록이 여기에 쌓입니다.</td></tr>';
+  }
+
+  appendRow(row) {
+    const empty = this.tbody.querySelector(".empty-row");
+    if (empty) empty.remove();
+    const tr = document.createElement("tr");
+    const cells = [
+      [row.seq_no], [row.work_order_id],
+      [row.auto_event_name, row.auto_event_station ? "ev-auto" : ""],
+      [row.auto_recovery_action, row.auto_event_station ? "ev-auto" : ""],
+      [row.auto_delay_sec.toFixed(2)],
+      [row.manual_event_name, row.manual_event_stage !== null ? "ev-man" : ""],
+      [row.manual_delay_sec.toFixed(2)],
+      [row.fastening_torque_nm.toFixed(2)], [row.weld_quality_idx.toFixed(2)], [row.vision_score_pct.toFixed(2)],
+      [row.cycle_time_sec.toFixed(2)], [row.manual_cycle_time_sec.toFixed(2)],
+    ];
+    for (const [v, cls] of cells) {
+      const td = document.createElement("td");
+      td.textContent = v;
+      if (cls) td.className = cls;
+      tr.appendChild(td);
+    }
+    this.tbody.appendChild(tr);
+    this.logWrap.scrollTop = this.logWrap.scrollHeight;
+  }
+
+  updateMiniCharts() {
+    const e = this.engine, n = e.records.length;
+    const defs = [
+      { title: "볼트 체결 토크: 수작업(주황) vs 자동재체결(파랑)", ymin: 39.5, ymax: 50.5,
+        series: [
+          { type: "line", data: e.col("manual_torque_nm"), color: "#FB923C", lw: 1.0, dash: true, alpha: 0.75, label: "수작업" },
+          { type: "line", data: e.col("fastening_torque_nm"), color: "#38BDF8", lw: 1.6, alpha: 1, label: "자동화 H/W" }] },
+      { title: "돌발 사고 복구 지연(초): 수동수리(주황) vs 자동복구(파랑)", ymin: 0, ymax: 19.5,
+        series: [
+          { type: "bar", data: e.col("manual_delay_sec"), color: "#FB923C", alpha: 0.65, label: "수동수리지연" },
+          { type: "bar", data: e.col("auto_delay_sec"), color: "#38BDF8", alpha: 0.95, label: "자동복구지연" }] },
+      { title: "총 사이클 타임(초): 수작업 vs 스마트공장", ymin: 9.0, ymax: 44.0,
+        series: [
+          { type: "line", data: e.col("manual_cycle_time_sec"), color: "#FB923C", lw: 1.0, dash: true, alpha: 0.75, label: "수작업" },
+          { type: "line", data: e.col("cycle_time_sec"), color: "#10B981", lw: 1.8, alpha: 1, label: "자동화" }] },
+    ];
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.mini.forEach((cv, i) => {
+      const cw = cv.clientWidth || 420, ch = cv.clientHeight || 178;
+      if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) {
+        cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+      }
+      const ctx = cv.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawChart(ctx, { x: 0, y: 0, w: cw, h: ch }, {
+        ...defs[i], n, theme: DARK_THEME, padL: 38, padT: 24, padB: 20,
+        titleSize: 12, tickSize: 10, labelSize: 10, legendSize: 10,
+      });
+    });
+  }
+
+  /* ---------- 즉시 완주 / 리셋 / 저장 ---------- */
+  instantFinish() {
+    this.running = false;
+    this.autoParts = []; this.manualParts = [];
+    while (this.engine.seqNo < this.target) {
+      const row = this.engine.step();
+      this.manualCompleted = Math.floor(row.seq_no * 0.45);
+      this.onFinished(row, { skipChart: true });
+    }
+    this.setPlayButton(false);
+    this.updateMiniCharts();
+    this.showResult("🎉 200개 돌발 사고·후속 조치 비교 시뮬레이션 완료!");
+  }
+
+  reset() {
+    this.running = false;
+    this.engine.reset();
+    this.resetState();
+    this.setPlayButton(false);
+    this.updateCards(null);
+    this.renderTableEmpty();
+    this.updateMiniCharts();
+  }
+
+  showResult(title) {
+    const e = this.engine;
+    document.getElementById("modal-title").textContent = title;
+    const items = [
+      `돌발 이벤트 건수: 수작업 ${e.manualEventCount}건 vs 스마트공장 ${e.autoEventCount}건 (예지보전으로 감소!)`,
+      `사고 발생 시 복구 시간: 수작업 +9.5~15.0초 정체 vs 스마트공장 +1.3~2.1초 즉시 자동 복구!`,
+      `전체 평균 사이클 타임: 수작업 ${e.mean("manual_cycle_time_sec").toFixed(2)}초 vs 스마트공장 ${e.mean("cycle_time_sec").toFixed(2)}초`,
+      `체결 토크 표준편차: 수작업 ±${e.std("manual_torque_nm").toFixed(3)} N·m vs 스마트공장 ±${e.std("fastening_torque_nm").toFixed(3)} N·m`,
+    ];
+    const ol = document.getElementById("modal-list");
+    ol.innerHTML = "";
+    items.forEach(t => { const li = document.createElement("li"); li.textContent = t; ol.appendChild(li); });
+    document.getElementById("modal").classList.add("open");
+    document.getElementById("m-csv").focus();
+  }
+  closeModal() { document.getElementById("modal").classList.remove("open"); }
+
+  download(blob, name) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  }
+  exportCSV() {
+    if (!this.engine.records.length) { alert("데이터가 없습니다. [▶ 공장 가동 시작] 또는 [⚡ 200개 즉시 완주]를 먼저 눌러주세요."); return; }
+    this.download(new Blob([this.engine.toCSV()], { type: "text/csv;charset=utf-8" }), "auto_parts_fa_hw_data.csv");
+  }
+  exportPNG() {
+    if (!this.engine.records.length) { alert("데이터가 없습니다. [▶ 공장 가동 시작] 또는 [⚡ 200개 즉시 완주]를 먼저 눌러주세요."); return; }
+    renderDashboard(this.engine).toBlob(b => this.download(b, "auto_parts_fa_hw_dashboard.png"), "image/png");
+  }
+}
+
+window.addEventListener("DOMContentLoaded", () => new App());
+</script>
+</body>
+</html>
